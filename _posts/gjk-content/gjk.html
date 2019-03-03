@@ -37,7 +37,8 @@
 		<script src="TransformControls.js"></script>
 		<script src="QuickHull.js"></script>
 		<script src="ConvexGeometry.js"></script>
-		<script src="WebGL.js"></script>
+        <script src="WebGL.js"></script>
+        <script src="libs/dat.gui.min.js"></script>
 
 		<script>
 			if ( WEBGL.isWebGLAvailable() === false ) {
@@ -68,29 +69,36 @@
                     helper.material.transparent = true;
                     this.scene.add( helper );
                     
-                    this.AddObject(new THREE.Vector3(-10, 0, 0), 0xffffff);
-                    this.AddObject(new THREE.Vector3(10, 0, 0), 0xffffff);
+                    this.AddObject(new THREE.Vector3(-10, 0, 0), 0x6666ff);
+                    this.AddObject(new THREE.Vector3(10, 0, 0), 0x66ff66);
 
                     this.InitControls();
 
                     //
                     window.addEventListener( 'resize', this.OnWindowResize, false );
-                    this.Animate();
+                    // this.Animate();
+                    this.Render();
                 },
                 InitControls: function() {
                     var controls = new THREE.OrbitControls( this.camera, this.renderer.domElement );
                     controls.minDistance = 20;
                     controls.maxDistance = 200;
 
+                    controls.addEventListener("change", function () {
+                        objectView.Render();
+                    });
+
                     var transformControls = new THREE.TransformControls(this.camera, this.renderer.domElement);
                     transformControls.addEventListener( 'dragging-changed', function ( event ) {
                         controls.enabled = ! event.value;
+                        objectView.Render();
                     } );
                     transformControls.addEventListener( 'objectChange', function () {
                         var obj1 = transformControls.object;
                         var obj2 = obj1.sibling;
                         obj2.position.set(obj1.position.x, obj1.position.y, obj1.position.z);
                         minkowskiView.GenerateMinkowskiDifference();
+                        objectView.Render();
                     } );
 
                     this.scene.add( transformControls );
@@ -100,9 +108,11 @@
                     dragcontrols.addEventListener( 'hoveron', function ( event ) {
                         if(!transformControls.dragging)
                             transformControls.attach( event.object );
+                        objectView.Render();
                     } );
                     dragcontrols.addEventListener( 'hoveroff', function () {
                         transformControls.detach();
+                        objectView.Render();
                     } );
                 },
                 AddObject: function(position, color) {
@@ -147,10 +157,6 @@
 
                     this.objects.push(frontMesh);
                 },
-                Animate: function() {
-                    requestAnimationFrame( objectView.Animate );
-                    objectView.Render();
-                },
                 Render: function() {
 				    this.renderer.render( this.scene, this.camera );
                 },
@@ -158,12 +164,15 @@
                     objectView.camera.aspect = window.innerWidth/2 / window.innerHeight;
                     objectView.camera.updateProjectionMatrix();
                     objectView.renderer.setSize( window.innerWidth/2, window.innerHeight );
+                    objectView.Render();
                 }
             };
             var minkowskiView = {
                 camera: null,
                 scene: null,
                 renderer: null,
+                showConvexHull: true,
+                showSimplexConstruction: false,
                 objects: [],
                 Init: function() {
                     this.scene = new THREE.Scene();
@@ -189,15 +198,20 @@
                     this.ShowOrigin();
 
                     this.InitControls();
+                    this.InitGUI();
 
                     //
                     window.addEventListener( 'resize', this.OnWindowResize, false );
-                    this.Animate();
+                    this.Render();
                 },
                 InitControls: function() {
                     var controls = new THREE.OrbitControls( this.camera, this.renderer.domElement );
                     controls.minDistance = 20;
                     controls.maxDistance = 200;
+
+                    controls.addEventListener("change", function () {
+                        minkowskiView.Render();
+                    });
                 },
                 ShowOrigin: function() {
                     var geometry = new THREE.BufferGeometry();
@@ -218,19 +232,46 @@
                         obj = undefined;
                     }
                 },
+                InitGUI: function() {
+                    var gui = new dat.GUI();
+                    var convexHullOption;
+
+                    gui.add( this, 'showSimplexConstruction' ).name( 'Show simplex construction' ).onChange( function ( value ) {
+                        if(!minkowskiView.showSimplexConstruction) {
+                            minkowskiView.showConvexHull = true;
+                            minkowskiView.GenerateMinkowskiDifference();
+                            addConvexHullOption();
+                        }
+                        else {
+                            gui.remove(convexHullOption);
+                        }
+				    } );
+
+                    var addConvexHullOption = function() {
+                        convexHullOption = gui.add( minkowskiView, 'showConvexHull' ).name( 'Show M.difference' ).onChange( function ( value ) {
+                            minkowskiView.GenerateMinkowskiDifference();
+				        } );
+                    };
+                    addConvexHullOption();
+                },
                 GenerateMinkowskiDifference: function() {
                     this.DisposeObjects();
+
+                    if(!this.showConvexHull) {
+                        this.Render();
+                        return;
+                    }
 
                     var vertices = [];
                     var vertsA = [];
                     var vertsB = [];
                     for(var j = 0; j < objectView.objects[0].geometry.vertices.length; j++) {
                         var vert = objectView.objects[0].geometry.vertices[j].clone();
-                        vertsA.push(vert.add(objectView.objects[0].position));
+                        vertsA.push(vert.applyMatrix4(objectView.objects[0].matrixWorld));
                     }
                     for(var j = 0; j < objectView.objects[1].geometry.vertices.length; j++) {
                         var vert = objectView.objects[1].geometry.vertices[j].clone();
-                        vertsB.push(vert.add(objectView.objects[1].position));
+                        vertsB.push(vert.applyMatrix4(objectView.objects[1].matrixWorld));
                     }
 
                     for(var i = 0; i < vertsA.length; i++) {
@@ -246,7 +287,7 @@
                     var texture = loader.load( 'textures/sprites/disc.png' );
                     
                     var meshMaterial = new THREE.MeshLambertMaterial( {
-                        color: 0x00ffff,
+                        color: 0x44ffff,
                         opacity: 0.5,
                         transparent: true
                     } );
@@ -275,10 +316,8 @@
 
                     this.objects.push(frontMesh);
                     this.objects.push(backMesh);
-                },
-                Animate: function() {
-                    requestAnimationFrame( minkowskiView.Animate );
-                    minkowskiView.Render();
+
+                    this.Render();
                 },
                 Render: function() {
 				    this.renderer.render( this.scene, this.camera );
@@ -287,6 +326,7 @@
                     minkowskiView.camera.aspect = window.innerWidth/2 / window.innerHeight;
                     minkowskiView.camera.updateProjectionMatrix();
                     minkowskiView.renderer.setSize( window.innerWidth/2, window.innerHeight );
+                    minkowskiView.Render();
                 }
             };
 
