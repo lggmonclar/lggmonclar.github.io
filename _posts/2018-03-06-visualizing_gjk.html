@@ -1,0 +1,483 @@
+---
+layout: post
+title: Visualizing GJK
+date: 2018-03-06 13:15:00
+description: step by step visualization for the popular collision detection algorithm
+---
+
+<style>
+	.dg.main {
+		display: table;
+		position: absolute;
+		top: 0;
+		right: 0;
+		height: 100%;
+	}
+
+	#minkowski-view, #objects-view {
+		position: relative;
+	}
+
+	#object-view-veil {
+		display: none;
+		position: absolute;
+		top: 0;
+		left: 0;
+		height: 100%;
+		width: 100%;
+		background-color: black;
+		opacity: 0.4;
+	}
+</style>
+
+<!-- This theme implements a built-in Jekyll feature, the use of Pygments, for sytanx highlighting. It supports more than 100 languages. This example is in C++. All you have to do is wrap your code in a liquid tag: -->
+
+<div id="objects-view">
+	<div id="object-view-veil"></div>
+</div>
+<div id="minkowski-view"></div>
+
+<!-- Produces something like this:  -->
+
+<!-- {% highlight c++ %}
+
+int main(int argc, char const *argv[])
+{
+	string myString;
+
+	cout << "input a string: ";
+	getline(cin, myString);
+	int length = myString.length();
+	
+	char charArray = new char * [length];
+
+	charArray = myString;
+	for(int i = 0; i < length; ++i){
+		cout << charArray[i] << " ";
+	}
+	
+	return 0;
+}
+
+{% endhighlight %} -->
+
+<script src="{{ base.url | prepend: site.url }}/js/three.js"></script>
+<script src="{{ base.url | prepend: site.url }}/js/OrbitControls.js"></script>
+<script src="{{ base.url | prepend: site.url }}/js/DragControls.js"></script>
+<script src="{{ base.url | prepend: site.url }}/js/TransformControls.js"></script>
+<script src="{{ base.url | prepend: site.url }}/js/QuickHull.js"></script>
+<script src="{{ base.url | prepend: site.url }}/js/ConvexGeometry.js"></script>
+<script src="{{ base.url | prepend: site.url }}/js/WebGL.js"></script>
+<script src="{{ base.url | prepend: site.url }}/js/dat.gui.min.js"></script>
+
+<script>
+	if ( WEBGL.isWebGLAvailable() === false ) {
+		document.body.appendChild( WEBGL.getWebGLErrorMessage() );
+	}
+
+	var rendererSize = 700;
+	var aspectRatio = 1.6;
+
+	var objectView = {
+		camera: null,
+		scene: null,
+		renderer: null,
+		objects: [],
+		orbitControls: null,
+		transformControls: null,
+		dragControls: null,
+		Init: function() {
+			this.scene = new THREE.Scene();
+			this.renderer = new THREE.WebGLRenderer( { antialias: true } );
+			this.renderer.setPixelRatio( window.devicePixelRatio );
+			this.renderer.setSize( rendererSize, rendererSize/aspectRatio );
+			document.getElementById("objects-view").appendChild( this.renderer.domElement );
+			// camera
+			this.camera = new THREE.PerspectiveCamera( 40, rendererSize / (rendererSize/aspectRatio), 1, 1000 );
+			this.camera.position.set( 25, 30, 40 );
+			this.scene.add( this.camera );
+			// light
+			this.scene.add( new THREE.AmbientLight( 0x222222 ) );
+			var light = new THREE.PointLight( 0xffffff, 1 );
+			this.camera.add( light );
+			// helper
+			var helper = new THREE.GridHelper( 2000, 100 );
+			helper.material.opacity = 0.25;
+			helper.material.transparent = true;
+			this.scene.add( helper );
+			
+			this.AddObject(new THREE.Vector3(8, 5, 5), 0x6666ff);
+			this.AddObject(new THREE.Vector3(10, 0, 3), 0x66ff66);
+
+			this.InitControls();
+
+			this.Render();
+		},
+		InitControls: function() {
+			document.getElementById("object-view-veil").style.display = "none";
+			this.orbitControls = new THREE.OrbitControls( this.camera, this.renderer.domElement );
+			this.orbitControls.minDistance = 20;
+			this.orbitControls.maxDistance = 200;
+
+			this.orbitControls.addEventListener("change", function () {
+				objectView.Render();
+			});
+
+			this.transformControls = new THREE.TransformControls(this.camera, this.renderer.domElement);
+			this.transformControls.addEventListener( 'dragging-changed', function ( event ) {
+				objectView.orbitControls.enabled = ! event.value;
+				objectView.Render();
+			} );
+			this.transformControls.addEventListener( 'objectChange', function () {
+				var obj1 = objectView.transformControls.object;
+				var obj2 = obj1.sibling;
+				obj2.position.set(obj1.position.x, obj1.position.y, obj1.position.z);
+				minkowskiView.GenerateMinkowskiDifference();
+				objectView.Render();
+			} );
+
+			this.scene.add( this.transformControls );
+
+			this.dragControls = new THREE.DragControls( this.objects, this.camera, this.renderer.domElement );
+			this.dragControls.enabled = false;
+
+			this.dragControls.addEventListener( 'hoveron', function ( event ) {
+				if(!objectView.transformControls.dragging)
+					objectView.transformControls.attach( event.object );
+				objectView.Render();
+			} );
+			this.dragControls.addEventListener( 'hoveroff', function () {
+				objectView.transformControls.detach();
+				objectView.Render();
+			} );
+		},
+		RemoveControls: function() {
+			document.getElementById("object-view-veil").style.display = "block";
+			this.orbitControls.dispose();
+			this.transformControls.dispose();
+			this.dragControls.dispose();
+		},
+		AddObject: function(position, color) {
+			// textures
+			var loader = new THREE.TextureLoader();
+			var texture = loader.load( '{{ base.url | prepend: site.url }}/assets/textures/sprites/disc.png' );
+			var group = new THREE.Group();
+			this.scene.add( group );
+			
+			var meshMaterial = new THREE.MeshLambertMaterial( {
+				color: color,
+				opacity: 0.5,
+				transparent: true
+			} );
+
+			var meshGeometry = new THREE.BoxGeometry( 10, 10, 10 );
+			var backMesh = new THREE.Mesh( meshGeometry, meshMaterial );
+			backMesh.material.side = THREE.BackSide; // back faces
+			backMesh.renderOrder = 0;
+			group.add( backMesh );
+
+			var frontMesh = new THREE.Mesh( meshGeometry, meshMaterial.clone() );
+			frontMesh.material.side = THREE.FrontSide; // front faces
+			frontMesh.renderOrder = 1;
+			group.add( frontMesh );
+
+			frontMesh.sibling = backMesh;
+			backMesh.sibling = frontMesh;
+
+			backMesh.position.set(position.x, position.y, position.z);
+			frontMesh.position.set(position.x, position.y, position.z);
+
+			this.objects.push(frontMesh);
+		},
+		Render: function() {
+			this.renderer.render( this.scene, this.camera );
+		},
+	};
+	var minkowskiView = {
+		camera: null,
+		scene: null,
+		points: null,
+		renderer: null,
+		showConvexHull: true,
+		simplexPoints: [],
+		UI: {
+			instance: null,
+			showSimplexConstructionOption: null,
+			addConvexHullOption: null,
+		},
+		objects: [],
+		Init: function() {
+			this.scene = new THREE.Scene();
+			this.renderer = new THREE.WebGLRenderer( { antialias: true } );
+			this.renderer.setPixelRatio( window.devicePixelRatio );
+			this.renderer.setSize( rendererSize, rendererSize/aspectRatio );
+			document.getElementById("minkowski-view").appendChild( this.renderer.domElement );
+			// camera
+			this.camera = new THREE.PerspectiveCamera( 40, rendererSize / (rendererSize / aspectRatio), 1, 1000 );
+			this.camera.position.set( 25, 30, 40 );
+			this.scene.add( this.camera );
+			// light
+			this.scene.add( new THREE.AmbientLight( 0x222222 ) );
+			var light = new THREE.PointLight( 0xffffff, 1 );
+			this.camera.add( light );
+			// helper
+			var helper = new THREE.GridHelper( 2000, 100 );
+			helper.material.opacity = 0.25;
+			helper.material.transparent = true;
+			this.scene.add( helper );
+			
+			this.GenerateMinkowskiDifference();
+			this.ShowOrigin();
+
+			this.InitControls();
+			this.InitGUI();
+
+			this.Render();
+		},
+		InitControls: function() {
+			var controls = new THREE.OrbitControls( this.camera, this.renderer.domElement );
+			controls.minDistance = 20;
+			controls.maxDistance = 200;
+
+			controls.addEventListener("change", function () {
+				minkowskiView.Render();
+			});
+		},
+		ShowOrigin: function() {
+			var geometry = new THREE.BufferGeometry();
+			var originPoint = [0, 0, 0];
+			var sprite = new THREE.TextureLoader().load( '{{ base.url | prepend: site.url }}/assets/textures/sprites/disc.png' );
+			geometry.addAttribute( 'position', new THREE.Float32BufferAttribute( originPoint, 3 ) );
+			material = new THREE.PointsMaterial( { size: 25, sizeAttenuation: false, map: sprite, alphaTest: 0.5, transparent: true } );
+			material.color.setHSL( 1.0, 1.0, 0.5 );
+			var particles = new THREE.Points( geometry, material );
+			this.scene.add( particles );
+		},
+		DisposeObjects: function() {
+			if(this.points) {
+				this.scene.remove(this.points);
+				this.points = null;
+			}
+			for(var i = 0; i < this.objects.length; i++) {
+				var obj = this.objects[i];
+				this.scene.remove(obj);
+				obj.geometry.dispose();
+				obj.material.dispose();
+				obj = undefined;
+			}
+		},
+		InitGUI: function() {
+			this.UI.instance = new dat.GUI({ autoplace: false });
+			var convexHullOption;
+
+			document.getElementById("minkowski-view").appendChild(this.UI.instance.domElement);
+
+			this.UI.addConvexHullOption = this.UI.instance.add( minkowskiView, 'showConvexHull' ).name( 'Show M.difference' ).onChange( function ( value ) {
+				minkowskiView.GenerateMinkowskiDifference();
+			} );
+
+			this.UI.addShowSimplexConstructionOption = (function () {
+				this.UI.showSimplexConstructionOption = this.UI.instance.add( minkowskiView, 'ShowSimplexConstruction' ).name( 'Build simplex' );
+			}).bind(this);
+
+			this.UI.addShowSimplexConstructionOption();
+		},
+		ShowSimplexConstruction: function () {
+			this.UI.instance.remove(this.UI.showSimplexConstructionOption);
+			objectView.RemoveControls();
+
+			this.UI.nextSimplexStepOption = this.UI.instance.add(minkowskiView, "ShowNextSimplexStep").name("Next Step");
+
+			ShowNextSimplexStep();
+		},
+		ShowNextSimplexStep: function() {
+			if(this.simplexPoints.length == 4) {
+				//Tetrahedron is done
+				objectView.InitControls();
+				this.UI.instance.remove(this.UI.nextSimplexStepOption);
+				this.UI.addShowSimplexConstructionOption();
+				return;
+			}
+
+			if(this.simplexPoints.length == 0) {
+				var support = SimplexSupport();
+				this.simplexPoints.push(support);
+				this.simplexDirection = support.clone().negate();
+			}
+			else {
+				var nextPoint = SimplexSupport(this.simplexDirection);
+				if(nextPoint.dot(this.simplexDirection) < 0) {
+					//NO INTERSECTION
+				}
+				this.simplexPoints.push(nextPoint);
+			}
+		},
+		DoSimplex() {
+			if(this.simplexPoints.length == 2) {
+				var B = this.simplexPoints[0];
+				var A = this.simplexPoints[1];
+				var AB = A.clone().sub(B);
+				var AO = A.clone().negate();
+
+				this.simplexDirection = AB.clone().cross(AO).cross(AB);
+			}
+			else if(this.simplexPoints.length == 3) {
+				var C = this.simplexPoints[0];
+				var B = this.simplexPoints[1];
+				var A = this.simplexPoints[2];
+				
+				var AO = A.clone().negate();
+				var AB = A.clone().sub(B);
+				var AC = A.clone().sub(C);
+				var ABC = AB.clone().cross(AC);
+				var O = new THREE.Vector3();
+
+				if(ABC.clone().cross(AC).dot(O) > 0) {
+					if(AC.dot(O) > 0) {
+						this.simplexPoints = [C, A];
+						this.simplexDirection = AC.clone().cross(AO).cross(AC);
+					}
+					else if (AB.dot(O) > 0) {
+						this.simplexPoints = [B, A];
+						this.simplexDirection = AB.clone().cross(AO).cross(AB);
+					}
+					else {
+						this.simplexPoints = [A];
+						this.simplexDirection = AO;
+					}
+				}
+				else {
+					if(AB.clone().cross(ABC).dot(O) > 0) {
+						if (AB.dot(O) > 0) {
+							this.simplexPoints = [B, A];
+							this.simplexDirection = AB.clone().cross(AO).cross(AB);
+						}
+						else {
+							this.simplexPoints = [A];
+							this.simplexDirection = AO;
+						}
+					}
+					else if (ABC.clone().dot(O) > 0) {
+						this.simplexPoints = [C, B, A];
+						this.simplexDirection = ABC;
+					}
+					else {
+						this.simplexPoints = [B, C, A];
+						this.simplexDirection = ABC.clone().negate();
+					}
+				}
+			}
+			else if(this.simplexPoints.length == 4) {
+				var D = this.simplexPoints[0];
+				var C = this.simplexPoints[1];
+				var B = this.simplexPoints[2];
+				var A = this.simplexPoints[3];
+				
+				var O = new THREE.Vector3();
+			}
+		},
+		SimplexSupport: function(direction = undefined) {
+			if(!direction) {
+				direction = new THREE.Vector3(Math.random(), Math.random(), Math.random());
+			}
+
+			var vertA;
+			var maxDistA = 0;
+			var vertB;
+			var maxDistB = 0;
+			for(var i = 0; i < objectView.objects[0].geometry.vertices.length; i++) {
+				var vert = objectView.objects[0].geometry.vertices[i].clone();
+				vert.applyMatrix4(objectView.objects[0].matrixWorld);
+
+				var dist = vert.dot(direction);
+				if(dist > maxDistA)
+					vertA = vert;
+			}
+
+			direction.negate();
+
+			for(var i = 0; i < objectView.objects[1].geometry.vertices.length; i++) {
+				var vert = objectView.objects[1].geometry.vertices[i].clone();
+				vertsB.push(vert.applyMatrix4(objectView.objects[1].matrixWorld));
+
+				var dist = vert.dot(direction);
+				if(dist > maxDistB)
+					vertB = vert;
+			}
+
+			vertA.add(vertB);
+			return vertA;
+		},
+		GenerateMinkowskiDifference: function() {
+			this.DisposeObjects();
+
+			if(!this.showConvexHull) {
+				this.Render();
+				return;
+			}
+
+			var vertices = [];
+			var vertsA = [];
+			var vertsB = [];
+			for(var j = 0; j < objectView.objects[0].geometry.vertices.length; j++) {
+				var vert = objectView.objects[0].geometry.vertices[j].clone();
+				vertsA.push(vert.applyMatrix4(objectView.objects[0].matrixWorld));
+			}
+			for(var j = 0; j < objectView.objects[1].geometry.vertices.length; j++) {
+				var vert = objectView.objects[1].geometry.vertices[j].clone();
+				vertsB.push(vert.applyMatrix4(objectView.objects[1].matrixWorld));
+			}
+
+			for(var i = 0; i < vertsA.length; i++) {
+				for(var j = 0; j < vertsB.length; j++) {
+					var v = vertsA[i].clone();
+					v.sub(vertsB[j]);
+					vertices.push(v);
+				}
+			}
+
+			// textures
+			var loader = new THREE.TextureLoader();
+			var texture = loader.load( '{{ base.url | prepend: site.url }}/assets/textures/sprites/disc.png' );
+			
+			var meshMaterial = new THREE.MeshLambertMaterial( {
+				color: 0x44ffff,
+				opacity: 0.5,
+				transparent: true
+			} );
+
+
+			var meshGeometry = new THREE.ConvexBufferGeometry( vertices );
+			var backMesh = new THREE.Mesh( meshGeometry, meshMaterial );
+			backMesh.material.side = THREE.BackSide; // back faces
+			backMesh.renderOrder = 0;
+			this.scene.add( backMesh );
+
+			var frontMesh = new THREE.Mesh( meshGeometry, meshMaterial.clone() );
+			frontMesh.material.side = THREE.FrontSide; // front faces
+			frontMesh.renderOrder = 1;
+			this.scene.add( frontMesh );
+
+			var pointsMaterial = new THREE.PointsMaterial( {
+				color: 0x0080ff,
+				map: texture,
+				size: 3,
+				alphaTest: 0.5
+			} );
+			var pointsGeometry = new THREE.BufferGeometry().setFromPoints( vertices );
+			this.points = new THREE.Points( pointsGeometry, pointsMaterial );
+			this.scene.add( this.points );
+
+			this.objects.push(frontMesh);
+			this.objects.push(backMesh);
+
+			this.Render();
+		},
+		Render: function() {
+			this.renderer.render( this.scene, this.camera );
+		},
+	};
+
+	objectView.Init();
+	minkowskiView.Init();
+</script>
