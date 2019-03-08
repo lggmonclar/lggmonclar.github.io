@@ -19,6 +19,7 @@ description: step by step visualization for the popular collision detection algo
 	}
 
 	#object-view-veil {
+		font-family:'Courier New', Courier, monospace;
 		display: none;
 		position: absolute;
 		top: 0;
@@ -27,6 +28,7 @@ description: step by step visualization for the popular collision detection algo
 		width: 100%;
 		background-color: black;
 		opacity: 0.4;
+		margin-bottom: 7px;
 	}
 
 	#object-view-veil>h2 {
@@ -38,6 +40,30 @@ description: step by step visualization for the popular collision detection algo
 		opacity: 1.0;
 		color: white;
 	}
+
+	#minkowski-console {
+		font-family:'Courier New', Courier, monospace;
+		font-size: 0.8em;
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		height: 30%;
+		width: 100%;
+		background-color: black;
+		opacity: 0.5;
+		overflow-y: hidden;
+		margin-bottom: 7px;
+		pointer-events: none;
+	}
+
+	#minkowski-console li {
+		height: 18px;
+		margin-left: 10px;
+		/* list-style: none; */
+		margin-bottom: 4px;
+		color: white;
+		opacity: 1.0;
+	}
 </style>
 
 <!-- This theme implements a built-in Jekyll feature, the use of Pygments, for sytanx highlighting. It supports more than 100 languages. This example is in C++. All you have to do is wrap your code in a liquid tag: -->
@@ -45,7 +71,11 @@ description: step by step visualization for the popular collision detection algo
 <div id="objects-view">
 	<div id="object-view-veil"><h2>Building simplex...</h2></div>
 </div>
-<div id="minkowski-view"></div>
+<div id="minkowski-view">
+	<div id="minkowski-console">
+
+	</div>
+</div>
 
 <!-- Produces something like this:  -->
 
@@ -72,6 +102,8 @@ int main(int argc, char const *argv[])
 {% endhighlight %} -->
 
 <script src="{{ base.url | prepend: site.url }}/js/three.js"></script>
+<script src="https://unpkg.com/three.texttexture"></script>
+<script src="https://unpkg.com/three.textsprite"></script>
 <script src="{{ base.url | prepend: site.url }}/js/OrbitControls.js"></script>
 <script src="{{ base.url | prepend: site.url }}/js/DragControls.js"></script>
 <script src="{{ base.url | prepend: site.url }}/js/TransformControls.js"></script>
@@ -116,7 +148,7 @@ int main(int argc, char const *argv[])
 			helper.material.transparent = true;
 			this.scene.add( helper );
 			
-			this.AddObject(new THREE.Vector3(8, 5, 5), 0x6666ff);
+			this.AddObject(new THREE.Vector3(12, 9, 5), 0x6666ff);
 			this.AddObject(new THREE.Vector3(10, 0, 3), 0x66ff66);
 
 			this.InitControls();
@@ -209,10 +241,13 @@ int main(int argc, char const *argv[])
 		points: null,
 		renderer: null,
 		showConvexHull: true,
+		showConsole: true,
 		simplexPoints: [],
 		simplexObject: null,
 		simplexDirectionObject: null,
 		simplexDirectionObjectOrigin: null,
+		textSprites: [],
+		console: null,
 		UI: {
 			instance: null,
 			showSimplexConstructionOption: null,
@@ -225,6 +260,9 @@ int main(int argc, char const *argv[])
 			this.renderer.setPixelRatio( window.devicePixelRatio );
 			this.renderer.setSize( rendererSize, rendererSize/aspectRatio );
 			document.getElementById("minkowski-view").appendChild( this.renderer.domElement );
+
+			this.InitConsole();
+
 			// camera
 			this.camera = new THREE.PerspectiveCamera( 40, rendererSize / (rendererSize / aspectRatio), 1, 1000 );
 			this.camera.position.set( 25, 30, 40 );
@@ -244,8 +282,19 @@ int main(int argc, char const *argv[])
 
 			this.InitControls();
 			this.InitGUI();
+			this.InitTextSprites();
 
 			this.Render();
+		},
+		InitConsole: function() {
+			this.console = document.getElementById("minkowski-console");
+		},
+		WriteToConsole: function(string) {
+			var node = document.createElement("li");
+			var textNode = document.createTextNode(string);
+			node.appendChild(textNode);
+			this.console.appendChild(node);
+			this.console.scrollTop = this.console.scrollHeight;
 		},
 		InitControls: function() {
 			var controls = new THREE.OrbitControls( this.camera, this.renderer.domElement );
@@ -285,7 +334,22 @@ int main(int argc, char const *argv[])
 
 			document.getElementById("minkowski-view").appendChild(this.UI.instance.domElement);
 
+			this.UI.instance.add( minkowskiView, 'showConsole' ).name( 'Show log' ).onChange( function ( value ) {
+				if(minkowskiView.showConsole) {
+					minkowskiView.console.style.display = "block";
+				}
+				else {
+					minkowskiView.console.style.display = "none";
+				}
+			} );
+
 			this.UI.addConvexHullOption = this.UI.instance.add( minkowskiView, 'showConvexHull' ).name( 'Show M.difference' ).onChange( function ( value ) {
+				if(minkowskiView.showConvexHull) {
+					minkowskiView.WriteToConsole("Showing minkowski difference convex hull");
+				}
+				else {
+					minkowskiView.WriteToConsole("Hiding minkowski difference convex hull");
+				}
 				minkowskiView.GenerateMinkowskiDifference();
 			} );
 
@@ -295,9 +359,48 @@ int main(int argc, char const *argv[])
 
 			this.UI.addShowSimplexConstructionOption();
 		},
+		InitTextSprites() {
+			for(var i = 0; i < 4; i++) {
+				var letter;
+				switch(i) {
+					case 0:
+						letter = "A";
+					break;
+					case 1:
+						letter = "B";
+					break;
+					case 2:
+						letter = "C";
+					break;
+					case 3:
+						letter = "D";
+					break;
+				}
+
+				this.textSprites.push(new THREE.TextSprite({
+					material: {
+						color: 0xffbbff
+					},
+					redrawInterval: 1,
+					textSize: 2,
+					texture: {
+						fontFamily: 'Arial, Helvetica, sans-serif',
+						text: letter,
+					},  
+				}));
+				this.scene.add(this.textSprites[i]);
+			}
+		},
+		UpdateTextSprites() {
+			for(var i = 0; i < this.simplexPoints.length; i++) {
+				this.textSprites[i].position.set(this.simplexPoints[i].x, this.simplexPoints[i].y, this.simplexPoints[i].z);
+			}
+		},
 		ShowSimplexConstruction: function () {
 			this.UI.instance.remove(this.UI.showSimplexConstructionOption);
 			objectView.RemoveControls();
+
+			minkowskiView.WriteToConsole("Building simplex for objects' current positions...");
 
 			this.UI.nextSimplexStepOption = this.UI.instance.add(minkowskiView, "ShowNextSimplexStep").name("Next Step");
 
@@ -306,6 +409,8 @@ int main(int argc, char const *argv[])
 		},
 		ShowNextSimplexStep: function() {
 			if(this.simplexPoints.length == 0) {
+				minkowskiView.WriteToConsole("Initializing simplex by picking any support vertex.");
+				minkowskiView.WriteToConsole("Setting search dir to the opposide of the support vertex direction from origin...");
 				var support = this.CalculateFurthestPointAlong();
 				this.simplexPoints.push(support);
 				this.simplexDirection = support.clone().negate();
@@ -315,7 +420,8 @@ int main(int argc, char const *argv[])
 				var nextPoint = this.CalculateFurthestPointAlong(this.simplexDirection);
 				if(nextPoint.dot(this.simplexDirection) < 0) {
 					//NO INTERSECTION
-					console.log("NO INTERSECTION");
+					minkowskiView.WriteToConsole("There are no points past the origin in this direction. No intersection was found.");
+
 					objectView.InitControls();
 					this.UI.instance.remove(this.UI.nextSimplexStepOption);
 					this.UI.addShowSimplexConstructionOption();
@@ -386,6 +492,8 @@ int main(int argc, char const *argv[])
 					this.scene.add(this.simplexObject);
 					break;
 			}
+			
+			this.UpdateTextSprites();
 		},
 		DisposeSimplex() {
 			if (this.simplexObject) {
@@ -396,114 +504,139 @@ int main(int argc, char const *argv[])
 		},
 		DoSimplex() {
 			if(this.simplexPoints.length == 2) {
-				console.log("2");
-				var B = this.simplexPoints[0];
-				var A = this.simplexPoints[1];
-				var AB = B.clone().sub(A);
-				var AO = A.clone().negate();
+				minkowskiView.WriteToConsole("2 vertices currently in simplex");
+				minkowskiView.WriteToConsole("Only one search direction is possible.");
+				var A = this.simplexPoints[0];
+				var B = this.simplexPoints[1];
+				var AB = A.clone().sub(B);
+				var BO = B.clone().negate();
 				
 				this.simplexDirectionObjectOrigin = A.clone().add(B).divideScalar(2);
-				this.simplexDirection = AB.clone().cross(AO).cross(AB);
+				this.simplexDirection = AB.clone().cross(BO).cross(AB);
 			}
 			else if(this.simplexPoints.length == 3) {
-				console.log("3");
-				var C = this.simplexPoints[0];
+				minkowskiView.WriteToConsole("3 vertices currently in simplex");
+				minkowskiView.WriteToConsole("Checking for best search direction based on the origin position");
+
+				var A = this.simplexPoints[0];
 				var B = this.simplexPoints[1];
-				var A = this.simplexPoints[2];
+				var C = this.simplexPoints[2];
 				
-				var AO = A.clone().negate();
-				var AB = B.clone().sub(A);
-				var AC = C.clone().sub(A);
-				var ABC = AB.clone().cross(AC);
+				var CO = C.clone().negate();
+				
+				var CB = B.clone().sub(C);
+				var CA = A.clone().sub(C);
+				var CBA = CB.clone().cross(CA);
 				var O = new THREE.Vector3();
 
-				if(ABC.clone().cross(AC).dot(AO) > 0) {
-					if(AC.dot(AO) > 0) {
+				if(CBA.clone().cross(CA).dot(CO) > 0) {
+					if(CA.dot(CO) > 0) {
 						this.simplexPoints = [C, A];
 
+						
+						minkowskiView.WriteToConsole("Removed vertex B");
+
 						this.simplexDirectionObjectOrigin = A.clone().add(C).divideScalar(2);
-						this.simplexDirection = AC.clone().cross(AO).cross(AC);
+						this.simplexDirection = CA.clone().cross(CO).cross(CA);
 					}
-					else if (AB.dot(AO) > 0) {
-						this.simplexPoints = [B, A];
+					else if (AB.dot(CO) > 0) {
+						this.simplexPoints = [B, C];
+						
+						minkowskiView.WriteToConsole("Removed vertex A");
 
 						this.simplexDirectionObjectOrigin = B.clone().add(A).divideScalar(2);
-						this.simplexDirection = AB.clone().cross(AO).cross(AB);
+						this.simplexDirection = AB.clone().cross(CO).cross(AB);
 					}
 					else {
-						this.simplexPoints = [A];
+						this.simplexPoints = [C];
 
-						this.simplexDirectionObjectOrigin = A;
-						this.simplexDirection = AO;
+						minkowskiView.WriteToConsole("Removed vertices A and B");
+
+						this.simplexDirectionObjectOrigin = C;
+						this.simplexDirection = CO;
 					}
 				}
 				else {
-					if(AB.clone().cross(ABC).dot(AO) > 0) {
-						if (AB.dot(AO) > 0) {
-							this.simplexPoints = [B, A];
+					if(CB.clone().cross(CBA).dot(CO) > 0) {
+						if (CB.dot(CO) > 0) {
+							this.simplexPoints = [B, C];
 
-							this.simplexDirectionObjectOrigin = B.clone().add(A).divideScalar(2);
-							this.simplexDirection = AB.clone().cross(AO).cross(AB);
+							minkowskiView.WriteToConsole("Removed vertex A");
+
+							this.simplexDirectionObjectOrigin = B.clone().add(C).divideScalar(2);
+							this.simplexDirection = CB.clone().cross(CO).cross(CB);
 						}
 						else {
-							this.simplexPoints = [A];
+							this.simplexPoints = [C];
+							
+							minkowskiView.WriteToConsole("Removed vertices A and B");
 
-							this.simplexDirectionObjectOrigin = A;
-							this.simplexDirection = AO;
+							this.simplexDirectionObjectOrigin = C;
+							this.simplexDirection = CO;
 						}
 					}
-					else if (ABC.clone().dot(AO) > 0) {
-						this.simplexPoints = [C, B, A];
+					else if (CBA.clone().dot(CO) > 0) {
+						this.simplexPoints = [A, B, C];
+
+						minkowskiView.WriteToConsole("Found triangle simplex in direction A, B, C");
 
 						this.simplexDirectionObjectOrigin = B.clone().add(A).add(C).divideScalar(3);
-						this.simplexDirection = ABC;
+						this.simplexDirection = CBA;
 					}
 					else {
-						this.simplexPoints = [B, C, A];
+						this.simplexPoints = [A, B, C];
+
+						minkowskiView.WriteToConsole("Found triangle simplex in direction B, A, C");
 
 						this.simplexDirectionObjectOrigin = B.clone().add(A).add(C).divideScalar(3);
-						this.simplexDirection = ABC.clone().negate();
+						this.simplexDirection = CBA.clone().negate();
 					}
 				}
 			}
 			else if(this.simplexPoints.length == 4) {
-				console.log("4");
-				var D = this.simplexPoints[0];
-				var C = this.simplexPoints[1];
-				var B = this.simplexPoints[2];
-				var A = this.simplexPoints[3];
+				var A = this.simplexPoints[0];
+				var B = this.simplexPoints[1];
+				var C = this.simplexPoints[2];
+				var D = this.simplexPoints[3];
 				
-				var AO = A.clone().negate();
-				var AB = B.clone().sub(A);
-				var AC = C.clone().sub(A);
-				var AD = D.clone().sub(A);
-				var ACB = AC.clone().cross(AB);
-				var ADC = AD.clone().cross(AC);
-				var ABD = AB.clone().cross(AD);
+				var DO = D.clone().negate();
+				var DC = C.clone().sub(D);
+				var DB = B.clone().sub(D);
+				var DA = A.clone().sub(D);
+				var DBC = DB.clone().cross(DC);
+				var DAB = DA.clone().cross(DB);
+				var DCA = DC.clone().cross(DA);
 
 				var O = new THREE.Vector3();
 
-				if(ACB.dot(AO) > 0) {
-					this.simplexPoints = [A, C, B];
+				if(DBC.dot(DO) > 0) {
+					this.simplexPoints = [D, B, C];
 
-					this.simplexDirectionObjectOrigin = B.clone().add(A).add(C).divideScalar(3);
-					this.simplexDirection = ACB;
+					minkowskiView.WriteToConsole("Origin is outside tetrahedron. Removing vertex A");
+
+					this.simplexDirectionObjectOrigin = D.clone().add(B).add(C).divideScalar(3);
+					this.simplexDirection = DBC;
                 }
-                else if(ADC.dot(AO) > 0) {
-					this.simplexPoints = [A, D, C];
+                else if(DAB.dot(DO) > 0) {
+					this.simplexPoints = [D, A, B];
+					
+					minkowskiView.WriteToConsole("Origin is outside tetrahedron. Removing vertex C");
 
-					this.simplexDirectionObjectOrigin = D.clone().add(A).add(C).divideScalar(3);
-					this.simplexDirection = ADC;
+					this.simplexDirectionObjectOrigin = D.clone().add(A).add(B).divideScalar(3);
+					this.simplexDirection = DAB;
                 }
-                else if(ABD.dot(AO) > 0) {
-					this.simplexPoints = [A, B, D];
+                else if(DCA.dot(DO) > 0) {
+					this.simplexPoints = [D, C, A];
+					
+					minkowskiView.WriteToConsole("Origin is outside tetrahedron. Removing vertex B");
 
-					this.simplexDirectionObjectOrigin = B.clone().add(A).add(D).divideScalar(3);
-					this.simplexDirection = ABD;
+					this.simplexDirectionObjectOrigin = D.clone().add(C).add(A).divideScalar(3);
+					this.simplexDirection = DCA;
                 }
                 else {
-					console.log("collision found");
                     // Origin is contained
+					minkowskiView.WriteToConsole("Origin is enclosed in tetrahedron");
+					minkowskiView.WriteToConsole("Collision detected.");
                 }
 			}
 		},
