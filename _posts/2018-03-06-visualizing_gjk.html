@@ -28,12 +28,22 @@ description: step by step visualization for the popular collision detection algo
 		background-color: black;
 		opacity: 0.4;
 	}
+
+	#object-view-veil>h2 {
+		position: relative;
+		float: left;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		opacity: 1.0;
+		color: white;
+	}
 </style>
 
 <!-- This theme implements a built-in Jekyll feature, the use of Pygments, for sytanx highlighting. It supports more than 100 languages. This example is in C++. All you have to do is wrap your code in a liquid tag: -->
 
 <div id="objects-view">
-	<div id="object-view-veil"></div>
+	<div id="object-view-veil"><h2>Building simplex...</h2></div>
 </div>
 <div id="minkowski-view"></div>
 
@@ -200,6 +210,9 @@ int main(int argc, char const *argv[])
 		renderer: null,
 		showConvexHull: true,
 		simplexPoints: [],
+		simplexObject: null,
+		simplexDirectionObject: null,
+		simplexDirectionObjectOrigin: null,
 		UI: {
 			instance: null,
 			showSimplexConstructionOption: null,
@@ -288,128 +301,253 @@ int main(int argc, char const *argv[])
 
 			this.UI.nextSimplexStepOption = this.UI.instance.add(minkowskiView, "ShowNextSimplexStep").name("Next Step");
 
-			ShowNextSimplexStep();
+			this.simplexPoints = [];
+			this.ShowNextSimplexStep();
 		},
 		ShowNextSimplexStep: function() {
+			if(this.simplexPoints.length == 0) {
+				var support = this.CalculateFurthestPointAlong();
+				this.simplexPoints.push(support);
+				this.simplexDirection = support.clone().negate();
+				this.simplexDirectionObjectOrigin = support;
+			}
+			else {
+				var nextPoint = this.CalculateFurthestPointAlong(this.simplexDirection);
+				if(nextPoint.dot(this.simplexDirection) < 0) {
+					//NO INTERSECTION
+					console.log("NO INTERSECTION");
+					objectView.InitControls();
+					this.UI.instance.remove(this.UI.nextSimplexStepOption);
+					this.UI.addShowSimplexConstructionOption();
+					return;
+				}
+				this.simplexPoints.push(nextPoint);
+				this.DoSimplex();
+			}
+
+			this.RenderSimplex();
+
+			if(this.simplexDirectionObject) {
+				this.scene.remove(this.simplexDirectionObject);
+			}
+
 			if(this.simplexPoints.length == 4) {
 				//Tetrahedron is done
 				objectView.InitControls();
 				this.UI.instance.remove(this.UI.nextSimplexStepOption);
 				this.UI.addShowSimplexConstructionOption();
+				this.Render();
 				return;
 			}
 
-			if(this.simplexPoints.length == 0) {
-				var support = SimplexSupport();
-				this.simplexPoints.push(support);
-				this.simplexDirection = support.clone().negate();
+			var origin = new THREE.Vector3( 0, 0, 0 );
+			var length = 5;
+			var hex = 0xffff00;
+
+			this.simplexDirectionObject = new THREE.ArrowHelper( this.simplexDirection.clone().normalize(), this.simplexDirectionObjectOrigin, length, hex );
+			this.scene.add( this.simplexDirectionObject );
+
+			this.Render();
+		},
+		RenderSimplex() {
+			this.DisposeSimplex();
+
+			switch(this.simplexPoints.length) {
+				case 2:
+					var material = new THREE.LineBasicMaterial( { color: 0xff00ff } );
+					var geometry = new THREE.Geometry();
+					geometry.vertices = this.simplexPoints;
+					this.simplexObject = new THREE.Line( geometry, material );
+					this.scene.add(this.simplexObject);
+					break;
+				case 3:
+					var material = new THREE.MeshBasicMaterial({
+						color: 0xff00ff,
+						wireframe: true
+					});
+					var geometry = new THREE.Geometry();
+					geometry.vertices = this.simplexPoints;
+					geometry.faces.push(new THREE.Face3(0, 1, 2));
+					this.simplexObject = new THREE.Mesh( geometry, material );
+					this.scene.add(this.simplexObject);
+					break;
+				case 4:
+					var material = new THREE.MeshBasicMaterial({
+						color: 0xff00ff,
+						wireframe: true
+					});
+					var geometry = new THREE.Geometry();
+					geometry.vertices = this.simplexPoints;
+					geometry.faces.push(new THREE.Face3(0, 1, 2));
+					geometry.faces.push(new THREE.Face3(0, 2, 3));
+					geometry.faces.push(new THREE.Face3(0, 1, 3));
+					geometry.faces.push(new THREE.Face3(1, 2, 3));
+					this.simplexObject = new THREE.Mesh( geometry, material );
+					this.scene.add(this.simplexObject);
+					break;
 			}
-			else {
-				var nextPoint = SimplexSupport(this.simplexDirection);
-				if(nextPoint.dot(this.simplexDirection) < 0) {
-					//NO INTERSECTION
-				}
-				this.simplexPoints.push(nextPoint);
+		},
+		DisposeSimplex() {
+			if (this.simplexObject) {
+				this.scene.remove(this.simplexObject);
+				this.simplexObject.geometry.dispose();
+				this.simplexObject.material.dispose();
 			}
 		},
 		DoSimplex() {
 			if(this.simplexPoints.length == 2) {
+				console.log("2");
 				var B = this.simplexPoints[0];
 				var A = this.simplexPoints[1];
-				var AB = A.clone().sub(B);
+				var AB = B.clone().sub(A);
 				var AO = A.clone().negate();
-
+				
+				this.simplexDirectionObjectOrigin = A.clone().add(B).divideScalar(2);
 				this.simplexDirection = AB.clone().cross(AO).cross(AB);
 			}
 			else if(this.simplexPoints.length == 3) {
+				console.log("3");
 				var C = this.simplexPoints[0];
 				var B = this.simplexPoints[1];
 				var A = this.simplexPoints[2];
 				
 				var AO = A.clone().negate();
-				var AB = A.clone().sub(B);
-				var AC = A.clone().sub(C);
+				var AB = B.clone().sub(A);
+				var AC = C.clone().sub(A);
 				var ABC = AB.clone().cross(AC);
 				var O = new THREE.Vector3();
 
-				if(ABC.clone().cross(AC).dot(O) > 0) {
-					if(AC.dot(O) > 0) {
+				if(ABC.clone().cross(AC).dot(AO) > 0) {
+					if(AC.dot(AO) > 0) {
 						this.simplexPoints = [C, A];
+
+						this.simplexDirectionObjectOrigin = A.clone().add(C).divideScalar(2);
 						this.simplexDirection = AC.clone().cross(AO).cross(AC);
 					}
-					else if (AB.dot(O) > 0) {
+					else if (AB.dot(AO) > 0) {
 						this.simplexPoints = [B, A];
+
+						this.simplexDirectionObjectOrigin = B.clone().add(A).divideScalar(2);
 						this.simplexDirection = AB.clone().cross(AO).cross(AB);
 					}
 					else {
 						this.simplexPoints = [A];
+
+						this.simplexDirectionObjectOrigin = A;
 						this.simplexDirection = AO;
 					}
 				}
 				else {
-					if(AB.clone().cross(ABC).dot(O) > 0) {
-						if (AB.dot(O) > 0) {
+					if(AB.clone().cross(ABC).dot(AO) > 0) {
+						if (AB.dot(AO) > 0) {
 							this.simplexPoints = [B, A];
+
+							this.simplexDirectionObjectOrigin = B.clone().add(A).divideScalar(2);
 							this.simplexDirection = AB.clone().cross(AO).cross(AB);
 						}
 						else {
 							this.simplexPoints = [A];
+
+							this.simplexDirectionObjectOrigin = A;
 							this.simplexDirection = AO;
 						}
 					}
-					else if (ABC.clone().dot(O) > 0) {
+					else if (ABC.clone().dot(AO) > 0) {
 						this.simplexPoints = [C, B, A];
+
+						this.simplexDirectionObjectOrigin = B.clone().add(A).add(C).divideScalar(3);
 						this.simplexDirection = ABC;
 					}
 					else {
 						this.simplexPoints = [B, C, A];
+
+						this.simplexDirectionObjectOrigin = B.clone().add(A).add(C).divideScalar(3);
 						this.simplexDirection = ABC.clone().negate();
 					}
 				}
 			}
 			else if(this.simplexPoints.length == 4) {
+				console.log("4");
 				var D = this.simplexPoints[0];
 				var C = this.simplexPoints[1];
 				var B = this.simplexPoints[2];
 				var A = this.simplexPoints[3];
 				
+				var AO = A.clone().negate();
+				var AB = B.clone().sub(A);
+				var AC = C.clone().sub(A);
+				var AD = D.clone().sub(A);
+				var ACB = AC.clone().cross(AB);
+				var ADC = AD.clone().cross(AC);
+				var ABD = AB.clone().cross(AD);
+
 				var O = new THREE.Vector3();
+
+				if(ACB.dot(AO) > 0) {
+					this.simplexPoints = [A, C, B];
+
+					this.simplexDirectionObjectOrigin = B.clone().add(A).add(C).divideScalar(3);
+					this.simplexDirection = ACB;
+                }
+                else if(ADC.dot(AO) > 0) {
+					this.simplexPoints = [A, D, C];
+
+					this.simplexDirectionObjectOrigin = D.clone().add(A).add(C).divideScalar(3);
+					this.simplexDirection = ADC;
+                }
+                else if(ABD.dot(AO) > 0) {
+					this.simplexPoints = [A, B, D];
+
+					this.simplexDirectionObjectOrigin = B.clone().add(A).add(D).divideScalar(3);
+					this.simplexDirection = ABD;
+                }
+                else {
+					console.log("collision found");
+                    // Origin is contained
+                }
 			}
 		},
-		SimplexSupport: function(direction = undefined) {
+		CalculateFurthestPointAlong: function(direction = undefined) {
 			if(!direction) {
 				direction = new THREE.Vector3(Math.random(), Math.random(), Math.random());
 			}
 
+			direction = direction.clone();
+
 			var vertA;
-			var maxDistA = 0;
+			var maxDistA = Number.NEGATIVE_INFINITY;
 			var vertB;
-			var maxDistB = 0;
+			var maxDistB = Number.NEGATIVE_INFINITY;
 			for(var i = 0; i < objectView.objects[0].geometry.vertices.length; i++) {
 				var vert = objectView.objects[0].geometry.vertices[i].clone();
 				vert.applyMatrix4(objectView.objects[0].matrixWorld);
 
 				var dist = vert.dot(direction);
-				if(dist > maxDistA)
+				if(dist > maxDistA) {
+					maxDistA = dist;
 					vertA = vert;
+				}
 			}
 
 			direction.negate();
 
 			for(var i = 0; i < objectView.objects[1].geometry.vertices.length; i++) {
 				var vert = objectView.objects[1].geometry.vertices[i].clone();
-				vertsB.push(vert.applyMatrix4(objectView.objects[1].matrixWorld));
+				vert.applyMatrix4(objectView.objects[1].matrixWorld);
 
 				var dist = vert.dot(direction);
-				if(dist > maxDistB)
+				if(dist > maxDistB) {
+					maxDistB = dist;
 					vertB = vert;
+				}
 			}
 
-			vertA.add(vertB);
+			vertA.sub(vertB);
 			return vertA;
 		},
 		GenerateMinkowskiDifference: function() {
 			this.DisposeObjects();
+			this.DisposeSimplex();
 
 			if(!this.showConvexHull) {
 				this.Render();
@@ -442,7 +580,7 @@ int main(int argc, char const *argv[])
 			
 			var meshMaterial = new THREE.MeshLambertMaterial( {
 				color: 0x44ffff,
-				opacity: 0.5,
+				opacity: 0.2,
 				transparent: true
 			} );
 
@@ -458,6 +596,9 @@ int main(int argc, char const *argv[])
 			frontMesh.renderOrder = 1;
 			this.scene.add( frontMesh );
 
+			this.objects.push(frontMesh);
+			this.objects.push(backMesh);
+
 			var pointsMaterial = new THREE.PointsMaterial( {
 				color: 0x0080ff,
 				map: texture,
@@ -467,9 +608,6 @@ int main(int argc, char const *argv[])
 			var pointsGeometry = new THREE.BufferGeometry().setFromPoints( vertices );
 			this.points = new THREE.Points( pointsGeometry, pointsMaterial );
 			this.scene.add( this.points );
-
-			this.objects.push(frontMesh);
-			this.objects.push(backMesh);
 
 			this.Render();
 		},
