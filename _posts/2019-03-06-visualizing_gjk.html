@@ -1,7 +1,7 @@
 ---
 layout: post
 title: Visualizing GJK
-date: 2018-03-06 13:15:00
+date: 2019-03-06 13:15:00
 description: step by step visualization for the popular collision detection algorithm
 ---
 
@@ -148,7 +148,7 @@ int main(int argc, char const *argv[])
 			helper.material.transparent = true;
 			this.scene.add( helper );
 			
-			this.AddObject(new THREE.Vector3(12, 9, 5), 0x6666ff);
+			this.AddObject(new THREE.Vector3(15, 9, 5), 0x6666ff);
 			this.AddObject(new THREE.Vector3(10, 0, 3), 0x66ff66);
 
 			this.InitControls();
@@ -248,6 +248,9 @@ int main(int argc, char const *argv[])
 		simplexDirectionObjectOrigin: null,
 		textSprites: [],
 		console: null,
+		isSupportStep: true,
+		isSimplexDone: false,
+		nextPoint: null,
 		UI: {
 			instance: null,
 			showSimplexConstructionOption: null,
@@ -390,10 +393,17 @@ int main(int argc, char const *argv[])
 				}));
 				this.scene.add(this.textSprites[i]);
 			}
+			this.UpdateTextSprites();
 		},
 		UpdateTextSprites() {
+			if(this.textSprites.length == 0)
+				return;
+
 			for(var i = 0; i < this.simplexPoints.length; i++) {
 				this.textSprites[i].position.set(this.simplexPoints[i].x, this.simplexPoints[i].y, this.simplexPoints[i].z);
+			}
+			for(var j = 0; j < 4 - this.simplexPoints.length; j++) {
+				this.textSprites[3-j].position.set(999,999,999);
 			}
 		},
 		ShowSimplexConstruction: function () {
@@ -410,25 +420,32 @@ int main(int argc, char const *argv[])
 		ShowNextSimplexStep: function() {
 			if(this.simplexPoints.length == 0) {
 				minkowskiView.WriteToConsole("Initializing simplex by picking any support vertex.");
-				minkowskiView.WriteToConsole("Setting search dir to the opposide of the support vertex direction from origin...");
 				var support = this.CalculateFurthestPointAlong();
 				this.simplexPoints.push(support);
 				this.simplexDirection = support.clone().negate();
 				this.simplexDirectionObjectOrigin = support;
+				minkowskiView.WriteToConsole("Setting search dir to the opposide of the support vertex direction from origin...");
 			}
 			else {
-				var nextPoint = this.CalculateFurthestPointAlong(this.simplexDirection);
-				if(nextPoint.dot(this.simplexDirection) < 0) {
-					//NO INTERSECTION
-					minkowskiView.WriteToConsole("There are no points past the origin in this direction. No intersection was found.");
-
-					objectView.InitControls();
-					this.UI.instance.remove(this.UI.nextSimplexStepOption);
-					this.UI.addShowSimplexConstructionOption();
-					return;
+				if(this.isSupportStep) {
+					this.nextPoint = this.CalculateFurthestPointAlong(this.simplexDirection);
+					this.simplexPoints.push(this.nextPoint);
 				}
-				this.simplexPoints.push(nextPoint);
-				this.DoSimplex();
+				else {
+					if(this.nextPoint.dot(this.simplexDirection) < 0) {
+						//NO INTERSECTION
+						minkowskiView.WriteToConsole("There are no points past the origin in this direction. No intersection was found.");
+
+						objectView.InitControls();
+						this.UI.instance.remove(this.UI.nextSimplexStepOption);
+						this.UI.addShowSimplexConstructionOption();
+						this.isSupportStep = true;
+						return;
+					}
+					this.DoSimplex();
+				}
+				
+				this.isSupportStep = !this.isSupportStep;
 			}
 
 			this.RenderSimplex();
@@ -437,11 +454,13 @@ int main(int argc, char const *argv[])
 				this.scene.remove(this.simplexDirectionObject);
 			}
 
-			if(this.simplexPoints.length == 4) {
+			if(this.isSimplexDone) {
 				//Tetrahedron is done
 				objectView.InitControls();
 				this.UI.instance.remove(this.UI.nextSimplexStepOption);
 				this.UI.addShowSimplexConstructionOption();
+				this.isSupportStep = true;
+				this.isSimplexDone = false;
 				this.Render();
 				return;
 			}
@@ -505,7 +524,7 @@ int main(int argc, char const *argv[])
 		DoSimplex() {
 			if(this.simplexPoints.length == 2) {
 				minkowskiView.WriteToConsole("2 vertices currently in simplex");
-				minkowskiView.WriteToConsole("Only one search direction is possible.");
+				minkowskiView.WriteToConsole("Origin is towards AB direction");
 				var A = this.simplexPoints[0];
 				var B = this.simplexPoints[1];
 				var AB = A.clone().sub(B);
@@ -516,7 +535,6 @@ int main(int argc, char const *argv[])
 			}
 			else if(this.simplexPoints.length == 3) {
 				minkowskiView.WriteToConsole("3 vertices currently in simplex");
-				minkowskiView.WriteToConsole("Checking for best search direction based on the origin position");
 
 				var A = this.simplexPoints[0];
 				var B = this.simplexPoints[1];
@@ -533,8 +551,7 @@ int main(int argc, char const *argv[])
 					if(CA.dot(CO) > 0) {
 						this.simplexPoints = [C, A];
 
-						
-						minkowskiView.WriteToConsole("Removed vertex B");
+						minkowskiView.WriteToConsole("Origin is towards AC direction");
 
 						this.simplexDirectionObjectOrigin = A.clone().add(C).divideScalar(2);
 						this.simplexDirection = CA.clone().cross(CO).cross(CA);
@@ -542,7 +559,7 @@ int main(int argc, char const *argv[])
 					else if (AB.dot(CO) > 0) {
 						this.simplexPoints = [B, C];
 						
-						minkowskiView.WriteToConsole("Removed vertex A");
+						minkowskiView.WriteToConsole("Origin is towards BC direction");
 
 						this.simplexDirectionObjectOrigin = B.clone().add(A).divideScalar(2);
 						this.simplexDirection = AB.clone().cross(CO).cross(AB);
@@ -550,7 +567,7 @@ int main(int argc, char const *argv[])
 					else {
 						this.simplexPoints = [C];
 
-						minkowskiView.WriteToConsole("Removed vertices A and B");
+						minkowskiView.WriteToConsole("Origin is towards C direction");
 
 						this.simplexDirectionObjectOrigin = C;
 						this.simplexDirection = CO;
@@ -561,7 +578,7 @@ int main(int argc, char const *argv[])
 						if (CB.dot(CO) > 0) {
 							this.simplexPoints = [B, C];
 
-							minkowskiView.WriteToConsole("Removed vertex A");
+							minkowskiView.WriteToConsole("Origin is towards BC direction");
 
 							this.simplexDirectionObjectOrigin = B.clone().add(C).divideScalar(2);
 							this.simplexDirection = CB.clone().cross(CO).cross(CB);
@@ -569,7 +586,7 @@ int main(int argc, char const *argv[])
 						else {
 							this.simplexPoints = [C];
 							
-							minkowskiView.WriteToConsole("Removed vertices A and B");
+							minkowskiView.WriteToConsole("Origin is towards C direction");
 
 							this.simplexDirectionObjectOrigin = C;
 							this.simplexDirection = CO;
@@ -578,7 +595,7 @@ int main(int argc, char const *argv[])
 					else if (CBA.clone().dot(CO) > 0) {
 						this.simplexPoints = [A, B, C];
 
-						minkowskiView.WriteToConsole("Found triangle simplex in direction A, B, C");
+						minkowskiView.WriteToConsole("Origin is towards A, B, C direction");
 
 						this.simplexDirectionObjectOrigin = B.clone().add(A).add(C).divideScalar(3);
 						this.simplexDirection = CBA;
@@ -586,7 +603,7 @@ int main(int argc, char const *argv[])
 					else {
 						this.simplexPoints = [A, B, C];
 
-						minkowskiView.WriteToConsole("Found triangle simplex in direction B, A, C");
+						minkowskiView.WriteToConsole("Origin is towards B, A, C direction");
 
 						this.simplexDirectionObjectOrigin = B.clone().add(A).add(C).divideScalar(3);
 						this.simplexDirection = CBA.clone().negate();
@@ -635,6 +652,7 @@ int main(int argc, char const *argv[])
                 }
                 else {
                     // Origin is contained
+					this.isSimplexDone = true;
 					minkowskiView.WriteToConsole("Origin is enclosed in tetrahedron");
 					minkowskiView.WriteToConsole("Collision detected.");
                 }
@@ -676,11 +694,15 @@ int main(int argc, char const *argv[])
 			}
 
 			vertA.sub(vertB);
+			
+			minkowskiView.WriteToConsole("Found furthest point along assigned direction");
 			return vertA;
 		},
 		GenerateMinkowskiDifference: function() {
 			this.DisposeObjects();
 			this.DisposeSimplex();
+			this.simplexPoints = [];
+			this.UpdateTextSprites();
 
 			if(!this.showConvexHull) {
 				this.Render();
