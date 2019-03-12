@@ -1,0 +1,145 @@
+---
+layout: post
+title: Visualizing GJK in 3D
+date: 2019-03-06 13:15:00
+description: step by step visualization for the popular collision detection algorithm
+---
+
+<style>
+	.dg.main {
+		display: table;
+		position: absolute;
+		top: 0;
+		right: 0;
+		height: 100%;
+	}
+
+	#minkowski-view, #objects-view {
+		position: relative;
+	}
+
+	#object-view-veil {
+		font-family:'Courier New', Courier, monospace;
+		display: none;
+		position: absolute;
+		top: 0;
+		left: 0;
+		height: 100%;
+		width: 100%;
+		background-color: black;
+		opacity: 0.4;
+		margin-bottom: 7px;
+	}
+
+	#object-view-veil>h2 {
+		position: relative;
+		float: left;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		opacity: 1.0;
+		color: white;
+	}
+
+	#minkowski-console {
+		font-family:'Courier New', Courier, monospace;
+		font-size: 0.8em;
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		height: 30%;
+		width: 100%;
+		background-color: black;
+		opacity: 0.5;
+		overflow-y: hidden;
+		margin-bottom: 7px;
+		pointer-events: none;
+	}
+
+	#minkowski-console li {
+		height: 18px;
+		margin-left: 10px;
+		/* list-style: none; */
+		margin-bottom: 4px;
+		color: white;
+		opacity: 1.0;
+	}
+
+	h3 {
+		margin: 10px 0px;
+	}
+
+	img {
+		max-width: 100%;
+	}
+</style>
+
+<p><i>Skip ahead to the <a href="#demo">visualization.</a></i></p>
+
+<p>Collision detection is perhaps one of the most ubiquitous features of any game engine. Surely we can make a game which doesn't need any type of collision detection whatsoever, however most games do need to detect whether an object has come into contact with another. Detecting collisions is to interactivity what sugar is to coffee. You can drink it without it, but having it just makes it so much better.</p>
+
+<p>Now, I don't actually mind if you don't like sugar in your coffee. But I <i>do</i> care about how a seemingly complex task like checking for collisions for all 3D objects in a scene of a game running at 60 FPS can possibly be achieved. Luckily, a lot of people have concerned themselves with finding exactly that answer.</p>
+
+<p><i>A Fast Procedure for Computing the Distance Between Complex Objects in Three-Dimensional Space</i> is a paper<sup><a href="#ref-1">[1]</a></sup> on the field of robotics and automation by Gilbert, Johnson and Keerthi (or <b>GJK</b> for short). In it, the authors describe an efficient algorithm for computing the Euclidean distance between a pair of convex set of points.</p>
+
+<p>Most people who learn about GJK soon come to face the general consensus that the original paper is, in fact, <b>very mathematically dense</b> -- almost unnecessarily so. When it comes to the algorithm itself and its possible optimizations, many people have succeeded in explaining it in a much less abstract fashion.</p>
+
+<p>If you are not yet familiar with the algorithm, I would highly encourage you to check references <a href="#ref-2">[2]</a> and <a href="#ref-3">[3]</a> before continuing, as my intent with this post is to provide you with a visualization tool for the algorithm's 3D case. I will not attempt to fully explain the algorithm, as the references already do a fantastic job at that.</p>
+
+<p>From this point forward, I will assume that you are familiar with the algorithm, so let's just recap:</p>
+
+<p>For any two sets of points (eg. objects) in euclidean space, we can compute the Minkowski difference between all the points in object A with all the points in object B, which will result in a shape that is the combination of the two objects.</p>
+
+<img src="/assets/img/gjk/minkowski_difference.png"/>
+
+<p>A nice property of the Minkowski difference is that if (and only if) the objects are intersecting one another in Euclidean space, their Minkowski space equivalent will <b>contain the origin.</b></p>
+
+<img src="/assets/img/gjk/euclidean_minkowski_space.png"/>
+
+<p>This property provides a reliable way to check if two convex objects of any complexity are intersecting one another, however building the whole Minkowski difference for every pair of objects every physics frame would be infeasible to say the least. That's why we are concerned in <b>gathering the minimum amount of information</b> to check whether the origin of the Minkowski space is contained in the difference or not. Enter the simplex.</p>
+
+<img src="/assets/img/gjk/simplices.png"/>
+
+<p>The algorithm (and its optimizations) intelligently searches only in directions that could possibly be useful for achieving this goal. The process is in fact very efficient and can be used as a reliable collision detection method.</p>
+
+<img src="/assets/img/gjk/simplex_construction.png"/>
+
+<p>I'm a firm believer that good visualization tools are fundamental to get a proper understanding of an algorithm or a mathematical concept, and even though there are a quite a few resources out there about GJK, most of them reserve themselves to building the reader's intuition up to 2D, with no real way of visualizing how the construction of the 4-simplex for the 3D case would look like.</p>
+
+<p>The tool below shows the Euclidean space representation of two objects, which can be translated around freely, and below it, the Minkowski space representation of their difference. Once the <b>build simplex</b> button is clicked, the tool will attempt to construct a 4-simplex to enclose the origin, step-by-step. The support points in the convex hull and the next search direction are also indicated between each step. The camera can be moved and zoomed around with the mouse in both spaces.</p>
+
+<h3 id="demo">WebGL visualization:</h3>
+
+<h4>Euclidean space</h4>
+<div id="objects-view">
+	<div id="object-view-veil"><h2>Building simplex...</h2></div>
+</div>
+<h4>Minkowski space</h4>
+<div id="minkowski-view">
+	<div id="minkowski-console">
+
+	</div>
+</div>
+
+<p>Hopefully some of you out there will find this useful. If you do and want to let me know, use any of the contact links <a target="_blank" href="/about">here</a></p>
+
+<p>Thanks for reading! Have a wonderful day.</p>
+
+<h3>References:</h3>
+<ol>
+	<li id="ref-1">Gilbert, Johnson, Keerthi - <a target="_blank" href="https://graphics.stanford.edu/courses/cs448b-00-winter/papers/gilbert.pdf"><i>A Fast Procedure for Computing the Distance Between Complex Objects in Three-Dimensional Space</i></a> - 1988 [Paper]</li>
+	<li id="ref-2">Casey Muratori - <a target="_blank" href="https://caseymuratori.com/blog_0003"><i>Implementing GJK</i></a> - 2006 [Online lecture]</li>
+	<li id="ref-3">Erin Catto - <a target="_blank" href="http://box2d.org/files/GDC2010/GDC2010_Catto_Erin_GJK.pdf"><i>Computing Distance</i></a> - GDC 2010 [Presentation]</li>
+</ol>
+
+<script src="{{ base.url | prepend: site.url }}/js/three.js"></script>
+<script src="https://unpkg.com/three.texttexture"></script>
+<script src="https://unpkg.com/three.textsprite"></script>
+<script src="{{ base.url | prepend: site.url }}/js/OrbitControls.js"></script>
+<script src="{{ base.url | prepend: site.url }}/js/DragControls.js"></script>
+<script src="{{ base.url | prepend: site.url }}/js/TransformControls.js"></script>
+<script src="{{ base.url | prepend: site.url }}/js/QuickHull.js"></script>
+<script src="{{ base.url | prepend: site.url }}/js/ConvexGeometry.js"></script>
+<script src="{{ base.url | prepend: site.url }}/js/WebGL.js"></script>
+<script src="{{ base.url | prepend: site.url }}/js/dat.gui.min.js"></script>
+<script src="{{ base.url | prepend: site.url }}/js/GJK_Three.js"></script>
