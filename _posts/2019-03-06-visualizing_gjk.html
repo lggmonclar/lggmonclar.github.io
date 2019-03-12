@@ -1,6 +1,6 @@
 ---
 layout: post
-title: Visualizing GJK
+title: Visualizing GJK in 3D
 date: 2019-03-06 13:15:00
 description: step by step visualization for the popular collision detection algorithm
 ---
@@ -68,9 +68,13 @@ description: step by step visualization for the popular collision detection algo
 	h3 {
 		margin: 10px 0px;
 	}
+
+	img {
+		max-width: 100%;
+	}
 </style>
 
-<p><i>Skip ahead to the <a href="#demo">Demo.</a></i></p>
+<p><i>Skip ahead to the <a href="#demo">visualization.</a></i></p>
 
 <p>Collision detection is perhaps one of the most ubiquitous features of any game engine. Surely we can make a game which doesn't need any type of collision detection whatsoever, however most games do need to detect whether an object has come into contact with another. Detecting collisions is to interactivity what sugar is to coffee. You can drink it without it, but having it just makes it so much better.</p>
 
@@ -83,6 +87,22 @@ description: step by step visualization for the popular collision detection algo
 <p>If you are not yet familiar with the algorithm, I would highly encourage you to check references <a href="#ref-2">[2]</a> and <a href="#ref-3">[3]</a> before continuing, as my intent with this post is to provide you with a visualization tool for the algorithm's 3D case. I will not attempt to fully explain the algorithm, as the references already do a fantastic job at that.</p>
 
 <p>From this point forward, I will assume that you are familiar with the algorithm, so let's just recap:</p>
+
+<p>For any two sets of points (eg. objects) in euclidean space, we can compute the Minkowski difference between all the points in object A with all the points in object B, which will result in a shape that is the combination of the two objects.</p>
+
+<img src="/assets/img/gjk/minkowski_difference.png"/>
+
+<p>A nice property of the Minkowski difference is that if (and only if) the objects are intersecting one another in Euclidean space, their Minkowski space equivalent will <b>contain the origin.</b></p>
+
+<img src="/assets/img/gjk/euclidean_minkowski_space.png"/>
+
+<p>This property provides a reliable way to check if two convex objects of any complexity are intersecting one another, however building the whole Minkowski difference for every pair of objects every physics frame would be infeasible to say the least. That's why we are concerned in <b>gathering the minimum amount of information</b> to check whether the origin of the Minkowski space is contained in the difference or not. Enter the simplex.</p>
+
+<img src="/assets/img/gjk/simplices.png"/>
+
+<p>The algorithm (and its optimizations) intelligently searches only in directions that could possibly be useful for achieving this goal. The process is in fact very efficient and can be used as a reliable collision detection method.</p>
+
+<img src="/assets/img/gjk/simplex_construction.png"/>
 
 <p>I'm a firm believer that good visualization tools are fundamental to get a proper understanding of an algorithm or a mathematical concept, and even though there are a quite a few resources out there about GJK, most of them reserve themselves to building the reader's intuition up to 2D, with no real way of visualizing how the construction of the 4-simplex for the 3D case would look like.</p>
 
@@ -100,6 +120,10 @@ description: step by step visualization for the popular collision detection algo
 
 	</div>
 </div>
+
+<p>Hopefully some of you out there will find this useful. If you do and want to let me know, use any of the contact links <a target="_blank" href="/about">here</a></p>
+
+<p>Thanks for reading! Have a wonderful day.</p>
 
 <h3>References:</h3>
 <ol>
