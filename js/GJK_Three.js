@@ -442,14 +442,14 @@ var minkowskiView = {
                     this.simplexDirectionObjectOrigin = A.clone().add(C).divideScalar(2);
                     this.simplexDirection = CA.clone().cross(CO).cross(CA);
                 }
-                else if (AB.dot(CO) > 0) {
+                else if (CB.dot(CO) > 0) {
                     this.simplexPoints = [B, C];
                     
                     minkowskiView.WriteToConsole("Origin is towards BC direction. Removing vertex A");
                     minkowskiView.WriteToConsole("Reassigning vertex letters...");
 
                     this.simplexDirectionObjectOrigin = B.clone().add(A).divideScalar(2);
-                    this.simplexDirection = AB.clone().cross(CO).cross(AB);
+                    this.simplexDirection = CB.clone().cross(CO).cross(CB);
                 }
                 else {
                     this.simplexPoints = [C];
@@ -483,9 +483,9 @@ var minkowskiView = {
                     }
                 }
                 else if (CBA.clone().dot(CO) > 0) {
-                    this.simplexPoints = [A, B, C];
+                    this.simplexPoints = [B, A, C];
 
-                    minkowskiView.WriteToConsole("Origin is towards A, B, C direction");
+                    minkowskiView.WriteToConsole("Origin is towards B, A, C direction");
 
                     this.simplexDirectionObjectOrigin = B.clone().add(A).add(C).divideScalar(3);
                     this.simplexDirection = CBA;
@@ -493,7 +493,7 @@ var minkowskiView = {
                 else {
                     this.simplexPoints = [A, B, C];
 
-                    minkowskiView.WriteToConsole("Origin is towards B, A, C direction");
+                    minkowskiView.WriteToConsole("Origin is towards A, B, C direction");
 
                     this.simplexDirectionObjectOrigin = B.clone().add(A).add(C).divideScalar(3);
                     this.simplexDirection = CBA.clone().negate();
