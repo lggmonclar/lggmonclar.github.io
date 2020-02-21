@@ -10,11 +10,9 @@ Hi! Welcome to my webpage.
 
 My name is Luiz Gustavo Gomes Monclar, although most people usually just call me Luiz. I started learning programming in 2010 when I got into university at my home city of Curitiba, Brazil. 
 
-As many people do, I started by developing games for school projects, but drifted a bit away from that path once I graduated. However, the more I worked with back and front-end development for apps and websites, the more I missed working on something that I truly enjoyed making. 
+Since December 2019, I've been living in Montréal, Canada and working during the day with really awesome people at <a href="https://www.square-enix-montreal.com/">Square Enix Montréal</a>, but every now and then I work on projects that are interesting to me outside of work. And those are usually what my blog posts are about.
 
-So, at the end of 2018 I set my goal to work with the development of game engines. This blog is my attempt to document interesting bits of my path to getting there, and any technical challenges that I find worthwile to write about.
-
-In my efforts to properly learn what goes into building a game engine, I'm currently making my own, which you can check <a href="https://github.com/lggmonclar/GRUT">here.</a>
+My most recent project is an ever ongoing game engine built on C++, which you can check at <a href="https://github.com/lggmonclar/GRUT">https://github.com/lggmonclar/GRUT</a>
 
 
 <br/>
@@ -28,6 +26,6 @@ In my efforts to properly learn what goes into building a game engine, I'm curre
 </span>
 
 <div class="col three caption">
-	I am currently looking for a job in the industry, so if you're interested in my work, please contact me using any of the above links.
+	I am currently a Backend programmer at <a href="https://www.square-enix-montreal.com/">Square Enix Montréal</a>.
 </div>
 
